@@ -80,10 +80,12 @@ grk_endr <- df %>%
 
 delomr_endr <- grk_endr %>% 
   mutate(across(c(gammel_grk, siste), ~substr(., 1, 6))) %>% 
+  rename(gammel_delomr = gammel_grk) %>% 
   distinct()
 
 kom_endr <- grk_endr %>% 
-  mutate(across(c(gammel_grk, siste), ~substr(., 1, 4))) %>% 
+  mutate(across(c(gammel_grk, siste), ~substr(., 1, 4))) %>%
+  rename(gammel_kom = gammel_grk) %>%
   distinct()
 
 write_csv2(grk_endr,
