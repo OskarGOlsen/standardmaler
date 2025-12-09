@@ -5,8 +5,10 @@ pacman::p_load(httr, # Api calls
                tidyverse
                )
 
-
-df <- GET("https://data.ssb.no/api/klass/v1/classifications/1/codes?from=2000-01-01&to=2025-01-01",
+# API CALL
+df <- GET("https://data.ssb.no/api/klass/v1/classifications/1/changes?from=2000-01-01&to=2025-01-01",
+        # Her kan man endre hvilke år man ønsker fra/til. 
+        # .. under from=xxxx-01-01 og to=xxxx-01-01
          add_headers(`accept` = 'application/json'),
          content_type('application/json'),
          encoding = "UTF-8") 
@@ -14,25 +16,30 @@ df <- GET("https://data.ssb.no/api/klass/v1/classifications/1/codes?from=2000-01
 
 df <- RJSONIO::fromJSON(content(df, "text"),
                               nullValue = NA)
+    # Klargjør for omgjøring til data.frame
 
-df <- do.call(rbind, sbtabell[[1]]) %>% 
+df <- do.call(rbind, df[[1]]) %>% 
   as.data.frame()
+    # Gjør om fra .json til data.frame
 
 df <- df %>% 
-  rename(ny_grk = parentCode,
-         gammel_grk = code,
-         fra_aar = validFromInRequestedRange,
-         til_aar = validToInRequestedRange) %>% 
-  distinct(ny_grk, gammel_grk, fra_aar, til_aar)
-
-write.csv(df, "alle_grk_endringer.csv")
+  rename(ny_grk = newCode,
+         gammel_grk= oldCode,
+         endringsdato = changeOccurred) %>% 
+    # Gir nye variabelnavn
+  mutate(grk_endringsaar = substr(endringsdato, 1, 4)) %>% 
+    # Lager endringsvariabel (år, dato er likt)
+  distinct(ny_grk, gammel_grk, grk_endringsaar) 
+    # Beholder unike obs. på disse tre variablene
 
 # Hvis en grunnkrets er registrert uten ny (altså den ikke har blitt endret
 # .. til noe nytt) dropper vi den. Vi kan bruke oppføringen der den ble
 # .. endret til det den er
 
 df <- df %>% 
-  filter(!is.na(ny_grk))
+  filter(gammel_grk != ny_grk)
+  # Dropper hvis grunnkretsen ikke endres. Grunnkretser som 'peker' til seg
+  # .. til seg selv vil skape trøbbel senere
 
 set.seed(123)
 
@@ -56,7 +63,6 @@ siste <- function(f) {
   f
 }
 
-
 # Hovedpoenget som følger er dette:
 # .. Hvis en kode som er oppført som 'ny', også på et tidspunkt er 
 # .. oppført som 'gammel', så er det ikke siste kode. Da går man videre til
@@ -66,11 +72,25 @@ siste <- function(f) {
 # .. slik at man ikke hopper over ledd, f.eks. dersom en kode er endret mer
 # .. enn to ganger
 
-endr <- df %>% 
+
+grk_endr <- df %>% 
   rowwise() %>% 
   mutate(siste = siste(ny_grk)) %>% 
   distinct(gammel_grk, siste)
 
-write_csv2(endr,
+delomr_endr <- grk_endr %>% 
+  mutate(across(c(gammel_grk, siste), ~substr(., 1, 6))) %>% 
+  distinct()
+
+kom_endr <- grk_endr %>% 
+  mutate(across(c(gammel_grk, siste), ~substr(., 1, 4))) %>% 
+  distinct()
+
+write_csv2(grk_endr,
            "grk_endringer_nyeste.csv")
+write_csv2(delomr_endr,
+           "delomr_endringer_nyeste.csv")
+write_csv2(kom_endr,
+           "kom_endringer_nyeste.csv")
+
 
